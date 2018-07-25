@@ -1,4 +1,7 @@
-.env
+build
 node_modules
-yarn-error.log
+src/components
 src/figmaComponents.js
+
+.env
+yarn-error.log

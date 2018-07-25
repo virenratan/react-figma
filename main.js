@@ -107,7 +107,7 @@ const preprocessTree = node => {
 const findCanvas = canvases => {
   let theCanvas = null
   canvases.map(canvas => {
-    if (canvas.name === 'Export Test Page') theCanvas = canvas
+    if (canvas.name === 'Page 1') theCanvas = canvas
     return canvas
   })
 
@@ -118,14 +118,13 @@ const findCanvas = canvases => {
 const shakeTree = node => {
   let interestingNodes = []
 
-  node.map(child => {
+  node.forEach(child => {
     if (child.name.charAt(0) === '#' && child.visible !== false) {
       preprocessTree(child)
       interestingNodes.push(child)
     } else if (child.children && child.children.length) {
       interestingNodes = [interestingNodes, ...shakeTree(child.children)]
     }
-    return child
   })
 
   return interestingNodes.filter(filteredNode => filteredNode.name)
@@ -137,8 +136,19 @@ const main = async () => {
   const doc = data.document
   const canvas = findCanvas(doc.children)
 
-  const components = shakeTree(canvas.children)
-  console.log({ components })
+  const rawComponents = canvas ? shakeTree(canvas.children) : []
+
+  const components = []
+  rawComponents.forEach(component => {
+    let found = 0
+    components.forEach(newItem => {
+      if (newItem.name === component.name) found += 1
+    })
+
+    if (!found) components.push(component)
+  })
+
+  // console.log({ components })
 
   // const guids = vectorList.join(',')
   // const imageData = await fetch(`${baseUrl}/v1/images/${fileKey}?ids=${guids}&format=svg`, {
@@ -175,6 +185,7 @@ const main = async () => {
   let nextSection = ''
 
   components.forEach(component => {
+    console.log({ name: component.name })
     figma.createComponent(component, images, componentMap)
     /* eslint-disable max-len */
     nextSection += `export class Master${component.name.replace(
@@ -193,24 +204,24 @@ const main = async () => {
   })
 
   const imported = {}
-  for (const key in componentMap) {
-    const component = componentMap[key]
+  Object.values(componentMap).forEach(component => {
     const { name } = component
     if (!imported[name]) {
       contents += `import { ${name} } from './components/${name}';\n`
     }
     imported[name] = true
-  }
+  })
   contents += '\n'
   contents += nextSection
-  // nextSection = ''
+  nextSection = ''
 
   contents += 'export function getComponentFromId(id) {\n'
 
-  for (const key in componentMap) {
-    contents += `  if (id === "${key}") return ${componentMap[key].instance};\n`
-    nextSection += `${componentMap[key].doc}\n`
-  }
+  Object.keys(componentMap).forEach(key => {
+    const component = componentMap[key]
+    contents += `  if (id === "${key}") return ${component.instance};\n`
+    nextSection += `${component.doc}\n`
+  })
 
   contents += '  return null;\n}\n\n'
   contents += nextSection
@@ -218,7 +229,7 @@ const main = async () => {
   const path = './src/figmaComponents.js'
   fs.writeFile(path, contents, err => {
     if (err) console.log(err)
-    console.log(`wrote ${path}`)
+    console.log(`Wrote ${path}`)
   })
 }
 
