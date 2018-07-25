@@ -10,17 +10,26 @@
     "start": "babel-node main.js"
   },
   "dependencies": {
+    "dotenv": "^5.0.1",
     "moment": "^2.20.1",
     "node-fetch": "^1.7.3",
-    "svg-to-jsx": "0.0.21",
     "react": "^16.2.0",
     "react-dom": "^16.2.0",
-    "react-scripts": "1.0.17"
+    "react-scripts": "1.0.17",
+    "svg-to-jsx": "0.0.21"
   },
   "devDependencies": {
     "babel-cli": "^6.26.0",
+    "babel-plugin-dedent": "^2.0.0",
     "babel-preset-env": "^1.6.1",
-    "dotenv": "^5.0.1"
+    "eslint": "^4.16.0",
+    "eslint-config-airbnb": "^16.1.0",
+    "eslint-config-prettier": "^2.9.0",
+    "eslint-plugin-import": "^2.8.0",
+    "eslint-plugin-jsx-a11y": "^6.0.3",
+    "eslint-plugin-prettier": "^2.5.0",
+    "eslint-plugin-react": "^7.1.0",
+    "prettier": "1.12.1"
   },
   "directories": {
     "lib": "lib"

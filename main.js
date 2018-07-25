@@ -1,183 +1,210 @@
-require('dotenv').config()
-const fetch = require('node-fetch');
-const fs = require('fs');
-const figma = require('./lib/figma');
+/* eslint-disable no-param-reassign */
+import dotenv from 'dotenv'
+import fetch from 'node-fetch'
+import fs from 'fs'
 
-const headers = new fetch.Headers();
-const componentList = [];
-let devToken = process.env.DEV_TOKEN;
+// libs.
+import figma from './lib/figma'
+
+// attempt to load figma dev token from .env file.
+dotenv.config()
+let devToken = process.env.DEV_TOKEN
 
 if (process.argv.length < 3) {
-  console.log('Usage: node setup.js <file-key> [figma-dev-token]');
-  process.exit(0);
+  // exit if document key and the figma dev token are both missing.
+  console.log('Usage: node setup.js <file-key> [figma-dev-token]')
+  process.exit(0)
+} else if (process.argv.length > 3) {
+  // use the fourth argument as the figma dev token.
+  [, , , devToken] = process.argv
 }
 
-if (process.argv.length > 3) {
-  devToken = process.argv[3];
-}
+// set fetch headers with the token.
+const headers = new fetch.Headers()
+headers.append('X-Figma-Token', devToken)
 
-headers.append('X-Figma-Token', devToken);
+// use the third argument as the file key.
+const [, , fileKey] = process.argv
 
-const fileKey = process.argv[2];
-const baseUrl = 'https://api.figma.com';
+const baseUrl = 'https://api.figma.com'
+const vectorMap = {}
+const vectorList = []
+const vectorTypes = ['VECTOR', 'LINE', 'REGULAR_POLYGON', 'ELLIPSE', 'STAR']
 
-const vectorMap = {};
-const vectorList = [];
-const vectorTypes = ['VECTOR', 'LINE', 'REGULAR_POLYGON', 'ELLIPSE', 'STAR'];
+const preprocessTree = node => {
+  let vectorsOnly = node.name.charAt(0) !== '#'
+  let vectorVConstraint = null
+  let vectorHConstraint = null
 
-function preprocessTree(node) {
-  let vectorsOnly = node.name.charAt(0) !== '#';
-  let vectorVConstraint = null;
-  let vectorHConstraint = null;
+  const paintsRequireRender = paints => {
+    if (!paints) return false
 
-  function paintsRequireRender(paints) {
-    if (!paints) return false;
-
-    let numPaints = 0;
+    let numPaints = 0
     for (const paint of paints) {
-      if (paint.visible === false) continue;
+      if (paint.visible !== false) {
+        numPaints += 1
+      }
 
-      numPaints++;
-      if (paint.type === 'EMOJI') return true;
+      if (paint.type === 'EMOJI') return true
     }
 
-    return numPaints > 1;
+    return numPaints > 1
   }
 
-  if (paintsRequireRender(node.fills) ||
-      paintsRequireRender(node.strokes) ||
-      (node.blendMode != null && ['PASS_THROUGH', 'NORMAL'].indexOf(node.blendMode) < 0)) {
-    node.type = 'VECTOR';
+  if (
+    paintsRequireRender(node.fills) ||
+    paintsRequireRender(node.strokes) ||
+    (node.blendMode != null && ['PASS_THROUGH', 'NORMAL'].indexOf(node.blendMode) < 0)
+  ) {
+    node.type = 'VECTOR'
   }
 
-  const children = node.children && node.children.filter((child) => child.visible !== false);
+  const children = node.children && node.children.filter(child => child.visible !== false)
   if (children) {
-    for (let j=0; j<children.length; j++) {
-      if (vectorTypes.indexOf(children[j].type) < 0) vectorsOnly = false;
+    for (let j = 0; j < children.length; j++) {
+      if (vectorTypes.indexOf(children[j].type) < 0) vectorsOnly = false
       else {
-        if (vectorVConstraint != null && children[j].constraints.vertical != vectorVConstraint) vectorsOnly = false;
-        if (vectorHConstraint != null && children[j].constraints.horizontal != vectorHConstraint) vectorsOnly = false;
-        vectorVConstraint = children[j].constraints.vertical;
-        vectorHConstraint = children[j].constraints.horizontal;
+        if (vectorVConstraint !== null && children[j].constraints.vertical !== vectorVConstraint) {
+          vectorsOnly = false
+        }
+        if (
+          vectorHConstraint !== null &&
+          children[j].constraints.horizontal !== vectorHConstraint
+        ) {
+          vectorsOnly = false
+        }
+        vectorVConstraint = children[j].constraints.vertical
+        vectorHConstraint = children[j].constraints.horizontal
       }
     }
   }
-  node.children = children;
+
+  node.children = children
 
   if (children && children.length > 0 && vectorsOnly) {
-    node.type = 'VECTOR';
+    node.type = 'VECTOR'
     node.constraints = {
       vertical: vectorVConstraint,
       horizontal: vectorHConstraint,
-    };
+    }
   }
 
   if (vectorTypes.indexOf(node.type) >= 0) {
-    node.type = 'VECTOR';
-    vectorMap[node.id] = node;
-    vectorList.push(node.id);
-    node.children = [];
+    node.type = 'VECTOR'
+    vectorMap[node.id] = node
+    vectorList.push(node.id)
+    node.children = []
   }
 
   if (node.children) {
     for (const child of node.children) {
-      preprocessTree(child);
+      preprocessTree(child)
     }
   }
 }
 
-async function main() {
-  let resp = await fetch(`${baseUrl}/v1/files/${fileKey}`, {headers});
-  let data = await resp.json();
+const main = async () => {
+  const resp = await fetch(`${baseUrl}/v1/files/${fileKey}`, { headers })
+  const data = await resp.json()
+  const doc = data.document
 
-  const doc = data.document;
-  const canvas = doc.children[0];
-  let html = '';
+  // get first canvas.
+  const canvas = doc.children[0]
 
-  for (let i=0; i<canvas.children.length; i++) {
-    const child = canvas.children[i]
-    if (child.name.charAt(0) === '#'  && child.visible !== false) {
-      const child = canvas.children[i];
-      preprocessTree(child);
-    }
-  }
-
-  let guids = vectorList.join(',');
-  data = await fetch(`${baseUrl}/v1/images/${fileKey}?ids=${guids}&format=svg`, {headers});
-  const imageJSON = await data.json();
-
-  const images = imageJSON.images || {};
-  if (images) {
-    let promises = [];
-    let guids = [];
-    for (const guid in images) {
-      if (images[guid] == null) continue;
-      guids.push(guid);
-      promises.push(fetch(images[guid]));
-    }
-
-    let responses = await Promise.all(promises);
-    promises = [];
-    for (const resp of responses) {
-      promises.push(resp.text());
-    }
-
-    responses = await Promise.all(promises);
-    for (let i=0; i<responses.length; i++) {
-      images[guids[i]] = responses[i].replace('<svg ', '<svg preserveAspectRatio="none" ');
-    }
-  }
-
-  const componentMap = {};
-  let contents = `import React, { PureComponent } from 'react';\n`;
-  let nextSection = '';
-
-  for (let i=0; i<canvas.children.length; i++) {
+  for (let i = 0; i < canvas.children.length; i++) {
     const child = canvas.children[i]
     if (child.name.charAt(0) === '#' && child.visible !== false) {
-      const child = canvas.children[i];
-      figma.createComponent(child, images, componentMap);
-      nextSection += `export class Master${child.name.replace(/\W+/g, "")} extends PureComponent {\n`;
-      nextSection += "  render() {\n";
-      nextSection += `    return <div className="master" style={{backgroundColor: "${figma.colorString(child.backgroundColor)}"}}>\n`;
-      nextSection += `      <C${child.name.replace(/\W+/g, "")} {...this.props} nodeId="${child.id}" />\n`;
-      nextSection += "    </div>\n";
-      nextSection += "  }\n";
-      nextSection += "}\n\n";
+      preprocessTree(canvas.children[i])
     }
   }
 
-  const imported = {};
+  const guids = vectorList.join(',')
+  const imageData = await fetch(`${baseUrl}/v1/images/${fileKey}?ids=${guids}&format=svg`, {
+    headers,
+  })
+  const imageJSON = await imageData.json()
+
+  const images = imageJSON.images || {}
+  if (images) {
+    let promises = []
+    const imageGuids = []
+    for (const guid in images) {
+      if (images[guid] !== null) {
+        imageGuids.push(guid)
+        promises.push(fetch(images[guid]))
+      }
+    }
+
+    let responses = await Promise.all(promises)
+    promises = []
+    for (const res of responses) {
+      promises.push(res.text())
+    }
+
+    responses = await Promise.all(promises)
+    for (let i = 0; i < responses.length; i++) {
+      images[imageGuids[i]] = responses[i].replace('<svg ', '<svg preserveAspectRatio="none" ')
+    }
+  }
+
+  const componentMap = {}
+  let contents = "import React, { PureComponent } from 'react';\n"
+  let nextSection = ''
+
+  for (let i = 0; i < canvas.children.length; i++) {
+    const child = canvas.children[i]
+    if (child.name.charAt(0) === '#' && child.visible !== false) {
+      const canvasChild = canvas.children[i]
+      figma.createComponent(canvasChild, images, componentMap)
+      /* eslint-disable max-len */
+      nextSection += `
+        export class Master${canvasChild.name.replace(/\W+/g, '')} extends PureComponent {
+          render() {
+            return (<div className="master" style={{backgroundColor: ${figma.colorString(canvasChild.backgroundColor)}"}}>
+              <C${canvasChild.name.replace(/\W+/g, '')} {...this.props} nodeId="${
+  canvasChild.id
+}" />
+              </div>)
+            }
+          }
+        }`
+      /* eslint-enable max-len */
+    }
+  }
+
+  const imported = {}
   for (const key in componentMap) {
-    const component = componentMap[key];
-    const name = component.name;
+    const component = componentMap[key]
+    const { name } = component
     if (!imported[name]) {
-      contents += `import { ${name} } from './components/${name}';\n`;
+      contents += `import { ${name} } from './components/${name}';\n`
     }
-    imported[name] = true;
+    imported[name] = true
   }
-  contents += "\n";
-  contents += nextSection;
-  nextSection = '';
+  contents += '\n'
+  contents += nextSection
+  // nextSection = ''
 
-  contents += `export function getComponentFromId(id) {\n`;
+  contents += 'export function getComponentFromId(id) {\n'
+
+  console.log({ componentMap })
 
   for (const key in componentMap) {
-    contents += `  if (id === "${key}") return ${componentMap[key].instance};\n`;
-    nextSection += componentMap[key].doc + "\n";
+    contents += `  if (id === "${key}") return ${componentMap[key].instance};\n`
+    nextSection += `${componentMap[key].doc}\n`
   }
 
-  contents += "  return null;\n}\n\n";
-  contents += nextSection;
+  contents += '  return null;\n}\n\n'
+  contents += nextSection
 
-  const path = "./src/figmaComponents.js";
-  fs.writeFile(path, contents, function(err) {
-    if (err) console.log(err);
-    console.log(`wrote ${path}`);
-  });
+  const path = './src/figmaComponents.js'
+  fs.writeFile(path, contents, err => {
+    if (err) console.log(err)
+    console.log(`wrote ${path}`)
+  })
 }
 
-main().catch((err) => {
-  console.error(err);
-  console.error(err.stack);
-});
+main().catch(err => {
+  console.error(err)
+  console.error(err.stack)
+})

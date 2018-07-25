@@ -1,0 +1,8 @@
+.git
+lib
+node_modules
+.npmrc
+.yarnrc
+yarn-error.log
+yarn.lock
+package.json
