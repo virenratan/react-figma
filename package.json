@@ -1,7 +1,14 @@
 {
-  "name": "figma-to-react",
+  "name": "figma-react",
+  "description": "This demonstrates using the Figma REST API to convert a Figma document to React Components.",
   "version": "0.1.0",
+  "main": "main.js",
+  "author": "Viren Ratan (https://viren.com.au)",
+  "license": "MIT",
   "private": true,
+  "scripts": {
+    "start": "babel-node main.js"
+  },
   "dependencies": {
     "moment": "^2.20.1",
     "node-fetch": "^1.7.3",
@@ -10,13 +17,12 @@
     "react-dom": "^16.2.0",
     "react-scripts": "1.0.17"
   },
-  "scripts": {
-    "start": "react-scripts start",
-    "build": "react-scripts build",
-    "test": "react-scripts test --env=jsdom",
-    "eject": "react-scripts eject"
-  },
   "devDependencies": {
+    "babel-cli": "^6.26.0",
+    "babel-preset-env": "^1.6.1",
     "dotenv": "^5.0.1"
+  },
+  "directories": {
+    "lib": "lib"
   }
 }
