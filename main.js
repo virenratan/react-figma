@@ -103,74 +103,94 @@ const preprocessTree = node => {
   }
 }
 
+// find a particular canvas within the document by name.
+const findCanvas = canvases => {
+  let theCanvas = null
+  canvases.map(canvas => {
+    if (canvas.name === 'Export Test Page') theCanvas = canvas
+    return canvas
+  })
+
+  return theCanvas
+}
+
+// recursively check down the tree for nodes we are interested in.
+const shakeTree = node => {
+  let interestingNodes = []
+
+  node.map(child => {
+    if (child.name.charAt(0) === '#' && child.visible !== false) {
+      preprocessTree(child)
+      interestingNodes.push(child)
+    } else if (child.children && child.children.length) {
+      interestingNodes = [interestingNodes, ...shakeTree(child.children)]
+    }
+    return child
+  })
+
+  return interestingNodes.filter(filteredNode => filteredNode.name)
+}
+
 const main = async () => {
   const resp = await fetch(`${baseUrl}/v1/files/${fileKey}`, { headers })
   const data = await resp.json()
   const doc = data.document
+  const canvas = findCanvas(doc.children)
 
-  // get first canvas.
-  const canvas = doc.children[0]
+  const components = shakeTree(canvas.children)
+  console.log({ components })
 
-  for (let i = 0; i < canvas.children.length; i++) {
-    const child = canvas.children[i]
-    if (child.name.charAt(0) === '#' && child.visible !== false) {
-      preprocessTree(canvas.children[i])
-    }
-  }
-
-  const guids = vectorList.join(',')
-  const imageData = await fetch(`${baseUrl}/v1/images/${fileKey}?ids=${guids}&format=svg`, {
-    headers,
-  })
-  const imageJSON = await imageData.json()
-
-  const images = imageJSON.images || {}
-  if (images) {
-    let promises = []
-    const imageGuids = []
-    for (const guid in images) {
-      if (images[guid] !== null) {
-        imageGuids.push(guid)
-        promises.push(fetch(images[guid]))
-      }
-    }
-
-    let responses = await Promise.all(promises)
-    promises = []
-    for (const res of responses) {
-      promises.push(res.text())
-    }
-
-    responses = await Promise.all(promises)
-    for (let i = 0; i < responses.length; i++) {
-      images[imageGuids[i]] = responses[i].replace('<svg ', '<svg preserveAspectRatio="none" ')
-    }
-  }
+  // const guids = vectorList.join(',')
+  // const imageData = await fetch(`${baseUrl}/v1/images/${fileKey}?ids=${guids}&format=svg`, {
+  //   headers,
+  // })
+  // const imageJSON = await imageData.json()
+  //
+  const images = {}
+  // const images = imageJSON.images || {}
+  // if (images) {
+  //   let promises = []
+  //   const imageGuids = []
+  //   for (const guid in images) {
+  //     if (images[guid] !== null) {
+  //       imageGuids.push(guid)
+  //       promises.push(fetch(images[guid]))
+  //     }
+  //   }
+  //
+  //   let responses = await Promise.all(promises)
+  //   promises = []
+  //   for (const res of responses) {
+  //     promises.push(res.text())
+  //   }
+  //
+  //   responses = await Promise.all(promises)
+  //   for (let i = 0; i < responses.length; i++) {
+  //     images[imageGuids[i]] = responses[i].replace('<svg ', '<svg preserveAspectRatio="none" ')
+  //   }
+  // }
 
   const componentMap = {}
   let contents = "import React, { PureComponent } from 'react';\n"
   let nextSection = ''
 
-  for (let i = 0; i < canvas.children.length; i++) {
-    const child = canvas.children[i]
-    if (child.name.charAt(0) === '#' && child.visible !== false) {
-      const canvasChild = canvas.children[i]
-      figma.createComponent(canvasChild, images, componentMap)
-      /* eslint-disable max-len */
-      nextSection += `
-        export class Master${canvasChild.name.replace(/\W+/g, '')} extends PureComponent {
-          render() {
-            return (<div className="master" style={{backgroundColor: ${figma.colorString(canvasChild.backgroundColor)}"}}>
-              <C${canvasChild.name.replace(/\W+/g, '')} {...this.props} nodeId="${
-  canvasChild.id
-}" />
-              </div>)
-            }
-          }
-        }`
-      /* eslint-enable max-len */
-    }
-  }
+  components.forEach(component => {
+    figma.createComponent(component, images, componentMap)
+    /* eslint-disable max-len */
+    nextSection += `export class Master${component.name.replace(
+      /\W+/g,
+      ''
+    )} extends PureComponent {\n`
+    nextSection += '  render() {\n'
+    nextSection += `    return <div className="master" style={{backgroundColor: "${figma.colorString(component.backgroundColor)}"}}>\n`
+    nextSection += `      <C${component.name.replace(/\W+/g, '')} {...this.props} nodeId="${
+      component.id
+    }" />\n`
+    nextSection += '    </div>\n'
+    nextSection += '  }\n'
+    nextSection += '}\n\n'
+    /* eslint-enable max-len */
+  })
 
   const imported = {}
   for (const key in componentMap) {
@@ -186,8 +206,6 @@ const main = async () => {
   // nextSection = ''
 
   contents += 'export function getComponentFromId(id) {\n'
-
-  console.log({ componentMap })
 
   for (const key in componentMap) {
     contents += `  if (id === "${key}") return ${componentMap[key].instance};\n`
