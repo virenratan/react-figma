@@ -1,8 +1,8 @@
-import React from 'react';
-import ReactDOM from 'react-dom';
-import './index.css';
-import { MasterClock } from './figmaComponents';
-import registerServiceWorker from './registerServiceWorker';
+import React from 'react'
+import ReactDOM from 'react-dom'
+import './index.css'
+import { MasterComponentArticleArticleCardDefault } from './figmaComponents'
+import registerServiceWorker from './registerServiceWorker'
 
-ReactDOM.render(<MasterClock />, document.body);
-registerServiceWorker();
+ReactDOM.render(<MasterComponentArticleArticleCardDefault />, document.body)
+registerServiceWorker()
