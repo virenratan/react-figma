@@ -3,7 +3,10 @@
   "plugins": ["import", "prettier"],
   "globals": {
     "__DEV__": false,
+    "document": false,
     "fetch": false,
+    "navigator": false,
+    "window": false
   },
   "env": {
     "node": true

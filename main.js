@@ -106,9 +106,8 @@ const preprocessTree = node => {
 // find a particular canvas within the document by name.
 const findCanvas = canvases => {
   let theCanvas = null
-  canvases.map(canvas => {
+  canvases.forEach(canvas => {
     if (canvas.name === 'Page 1') theCanvas = canvas
-    return canvas
   })
 
   return theCanvas
